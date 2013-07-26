@@ -1,0 +1,409 @@
+# Replication multiregional population projection Willekens & Rogers (1978)
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+setwd('C:/Users/MaHermans/Documents/work/CELLO/publications/aggr_mob_be')
+source('analyse/projection.r')
+```
+
+
+Central steps multiregional/state population projection model:
+
+1. Calculation of observed transfer rates rates $M_x$. 
+2. Calculation of $P_x$, the per-region observed death and outmigration probabilities (transfer probabilities), based on $M_x$.
+3. Calculation of expected number of survivors, based on $P_x$.
+4. Calculation of duration of residence/years lived, $L_x$ based on the number of survivors.
+5. Calculation of the surivivorship proportions $S_x$, based on $L_x$.
+6. Calculation of the fertility proportions $B_x$, based on $P_x$, $S_x$ and the observed fertility rates.
+7. Construction of generalized Leslie matrix $G$ based on $S_x$ and $B_x$.
+8. Projection using initial population $n_0$ and $G$.
+
+## 1. Observed population characteristics
+
+```{r, echo=FALSE}
+
+# read in population Slovenia, table 1.1
+# ---------------------------------------
+SL <- data.frame(matrix(
+  c(
+    0, 67800, 0, 417, 0, 192,
+    5, 74100, 0, 32, 0, 170,
+    10, 70700, 5, 21, 0, 105,
+    15, 60100, 953, 31, 0, 310,
+    20, 62900, 4444, 47, 0, 451,
+    25, 66500, 4204, 45, 0, 368,
+    30, 67100, 2758, 67, 0, 252,
+    35, 62900, 1438, 77, 0, 111,
+    40, 39500, 308, 76, 0, 40,
+    45, 47900, 34, 171, 0, 26,
+    50, 51300, 15, 268, 0, 34,
+    55, 46100, 0, 369, 0, 29,
+    60, 39600, 0, 513, 0, 35,
+    65, 29500, 0, 763, 0, 28,
+    70, 21700, 0, 1036, 0, 19,
+    75, 14400, 0, 1088, 0, 16,
+    80, 7100, 0, 1041, 0, 5,
+    85, 3600, 0, 733, 0, 4), nrow=18, byrow=TRUE))
+
+rownames(SL) <- SL[,1]
+SL <- SL[,2:6] # drop ages column
+colnames(SL) <- c('population', 'births', 'deaths', 'to_SL', 'to_RYU')
+
+# read in population for rest of Yugoslavia, table 1.1
+# -----------------------------------------------------
+RYU <- matrix(c(
+  0, 847900, 0, 19051, 231, 0,
+  5, 905200, 0, 606, 150, 0,
+  10, 808100, 54, 386, 127, 0,
+  15, 617400, 16335, 534, 419, 0,
+  20, 725500, 63828, 885, 680, 0,
+  25, 774000, 57477, 1227, 392, 0,
+  30, 728400, 32261, 1277, 255, 0,
+  35, 633300, 14903, 1313, 143, 0,
+  40, 392400, 4729, 1127, 72, 0,
+  45, 437100, 940, 1700, 41, 0,
+  50, 453800, 324, 2896, 59, 0,
+  55, 389300, 0, 3743, 80, 0,
+  60, 325800, 0, 5492, 66, 0,
+  65, 230600, 0, 6407, 36, 0,
+  70, 180000, 0, 8652, 14, 0,
+  75, 120900, 0, 8715, 12, 0,
+  80, 61200, 0, 6843, 12, 0,
+  85, 39300, 0, 5639, 3, 0), nrow=18, byrow=TRUE)
+
+rownames(RYU) <- RYU[,1]
+RYU <- RYU[,2:6] # drop ages column
+colnames(RYU) <- c('population', 'births', 'deaths', 'to_SL', 'to_RYU')
+
+# joint population for Yugoslavia, cf. table 1.6a
+# ------------------------------------------------
+YO <- SL + RYU
+
+# merge region migration to arrivals/departures
+YO[,4] <- rowSums(YO[,4:5])
+YO[,5] <- YO[,4]
+
+colnames(YO) <- c('population', 'births', 'deaths', 'arrivals', 'departures')
+
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+SL
+SL.tot <- colSums(SL)
+SL.tot
+
+RYU
+RYU.tot <- colSums(YO)
+RYU.tot
+
+RYU
+colSums(RYU)/colSums(RYU)[1]*5
+round((colSums(RYU)/colSums(RYU)[1])*1000,3) # crude observed rates
+
+```
+
+```{r, echo=FALSE}
+
+# Replicate Table 1.3 "Observed rates", pg. 11-12
+
+# observed death rate
+DR <- cbind(
+  SL[,'deaths']/SL[,'population'],
+  RYU[,'deaths']/RYU[,'population'])
+
+# observed fertility rate
+FR <- cbind(
+  SL[,'births']/SL[,'population'],
+  RYU[,'births']/RYU[,'population'])
+
+# observed outmigration rate
+
+MR <- cbind(
+  SL[,'to_RYU'] / SL[,'population'],
+  RYU[,'to_SL'] / RYU[,'population'])
+
+colnames(MR) <- colnames(FR) <- colnames(DR) <- c('slovenia', 'r.yogos')
+
+```
+
+Replicate Table 1.3 "Observed rates", pg. 11-12
+
+**Observed death rate**
+
+```{r}
+round(DR, 6)
+```
+
+**Observed fertility rate**
+
+```{r}
+round(FR, 6)
+```
+
+**Observed migration rate**
+
+```{r}
+round(MR, 6)
+```
+
+
+
+## 2. The multiregional life table
+
+Table 2.1 (p. 22) presents $P_x$, the **probabilities of dying and outmigrating** (or transfer probabilities). The calculation is presented in section 2.7, based on the observed death and migration rates (section 1).
+
+```{r}
+M <- transfer_rates(DR, MR)
+P <- transfer_prob(M)
+
+ages <- seq(0,85,5)
+states <- c('slovenia', 'r.yugos')
+
+P.sl <- state_table(P, 1, ages)
+P.ryu <- state_table(P, 2, ages)
+
+# calculate per region death rate
+P.sl <- cbind(1 - rowSums(P.sl), P.sl)
+P.ryu <- cbind(1 - rowSums(P.ryu), P.ryu)
+
+colnames(P.sl) <- colnames(P.ryu) <- c('death', 'to slov', 'to r.yug')
+
+P.sl # prob. of dying & outmigrating for Slovenia
+P.ryu # prob. of dying & outmigrating for rest of Yugoslavia 
+```
+
+
+### 2.1 Life Histories
+
+### 2.2 Expected Number of Survivors at Exact Age x
+
+The expected number of survivors is calculated based on $P_x$, the probability of dying and outmigrating, using
+
+$$
+l_{x+5} = P_x l_x
+$$
+
+where $l_0$ is a selected cohort size, identical for both regions, in this case 100000.
+
+The following two table replicate tabel 2.3, pg. 30.
+
+```{r}
+L.surv <- expected_survivors(P, radix=100000)
+
+# Exp. # of surv., initial region Slov.
+round(state_table(L.surv,1, ages, states)) 
+
+# Exp. # of surv., initial region r. Yugos.
+round(state_table(L.surv,2, ages, states)) 
+```
+
+
+### 2.3 Duration of Residence and Age Composition of the Life Table Population
+
+The duration of residence by place of birth is calculated for every age interval using
+
+$$
+L_x = \frac{5}{2} (\hat{l}_x + \hat{l}_{x+5})
+$$
+
+where $l_x$ and $l_{x+5}$ refer to the expected number of survivors for age $x$ (cf. section 2.2). For the last age interval, which is half-open and thus $\hat{l}_{x+5}$ not defined, we use
+
+$$
+L_z = M_z^{-1} \hat{l}_z
+$$
+
+where $M_z$ is the matrix containg the observed transtion rates for the last age interval.
+
+```{r}
+
+L.dur <- years_lived(L.surv)
+
+ # duration/number of years lived in each region, for Slov.
+state_table(L.dur,1, ages, states)
+
+# duration/number of years lived in each region, for r. Yugos.
+state_table(L.dur,2, ages, states) 
+
+```
+
+
+### 4. Total number of Years Lived beyond Age x
+
+### 5. Expectation of Life
+
+### 6. Survivorship and Outmigration Proportions
+
+For the projection matrix, we need the age-specific matrices of survivorship proportions $S_x$. These are based on the proportion of survivers $L_x$, using 
+
+$$
+S_x = L_{x+5} L_x^{-1}
+$$
+
+These age-specific surivivorship proportions for both regions are represented in Table 2.9 (pg. 46-47), replicated below.
+
+```{r}
+
+S <- survivor_prop(L.dur)
+
+# survivorship proportions for Slov.
+state_table(S,1, head(ages, -1), states) 
+
+# survivorship proportions for r. Yugos.
+state_table(S,2, head(ages, -1), states) 
+
+```
+
+
+### 2.7 Estimation of Age-specific Outmigration and Death Probabilities
+
+There are tree options for calculating the probabilities of dying and outmigrating (based on the observed transition rates):
+
+* Option 1: No multiple transitions (Rogers, 1975)
+* Option 2: Rogers, 1975 (mentioned, not used)
+* Option 3: Allows multiple transitions, used.
+
+We start by constructing $M_x$, containing observed outmigration and death rates. Based on this matrix, we can calculated $P_x$ using
+
+$$
+P_x = (I + 5/2 M_x)^{-1} (I - 5/2 M_x)
+$$
+
+The results are presented in section 2, table 2.1 (supra).
+
+
+## 3. Multiregional Population Projection
+
+### 3.1 The Growth Matrix
+
+The growth matrix $G$ is a generalized Leslie matrix, constructed from submatrices $S_x$, containing the survivorship proportions (calculated in section 2.6) and $B_s*, containing the fertility rates. E.g, in this two-region example:
+
+$$
+M_t = \begin{bmatrix}
+0 & 0 & B_{\alpha-5} & B_{\alpha} & B_{\alpha + 5} & B_{\ldots} & B_{\beta - 5} & 0 & 0\\ 
+S_{0} & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0\\ 
+0 & S_{5} & 0 & 0 & 0 & 0 & 0 & 0 & 0\\ 
+0 & 0 & S_{10} & 0 & 0 & 0 & 0 & 0 & 0\\ 
+0 & 0 & 0 & S_{15} & 0 & 0 & 0 & 0 & 0\\ 
+0 & 0 & 0 & 0 & S_{20} & 0 & 0 & 0 & 0\\ 
+0 & 0 & 0 & 0 & 0 & S_{25} & 0 & 0 & 0\\ 
+0 & 0 & 0 & 0 & 0 & 0 & S_{\ldots} & 0 & 0\\ 
+0 & 0 & 0 & 0 & 0 & 0 & 0 & S_{z-5} & 0
+\end{bmatrix}
+$$
+
+with
+
+$$
+S_x = \begin{bmatrix}
+s^x_{11} & s^x_{21}\\ 
+s^x_{12} & s^x_{22}
+\end{bmatrix}
+$$
+
+$$
+B_x = \begin{bmatrix}
+b^x_{11} & b^x_{21}\\ 
+b^x_{12} & b^x_{22}
+\end{bmatrix}
+$$
+
+While we have already the $S_x$ submatrices, we still need to calculate $B_x$, based on the observed fertilitary rates $F_x$, the transition probabilites $P_x$ and the survivorship proportions $S_x$, using
+
+$$
+B_x = \frac{5}{4} ( P_0 + I ) ( F{x+5} S_x )
+$$
+
+```{r}
+B <- birth_prop(FR, P, S)
+
+# birth proportions Slov.
+round(state_table(B,1, head(ages, -1), states), 6) 
+
+# birth proportions r. Yugo.
+round(state_table(B,2, head(ages, -1), states), 6) 
+
+# TODO: (rounding) error last two values RYU?
+```
+
+We construct $G$ by combining $B_x$ and $S_x$, resulting in a 36x36 matrix.
+
+```{r}
+G <- leslie(B, S)
+dim(G)
+```
+
+
+
+## Multiregional population projection
+
+The initial population is the observed population at $t_0$, formated as a vector of length 36 with 2 regions nested within 18 age-groups.
+
+```{r}
+n0 <- ggplot2:::interleave(SL[,1], RYU[,1])
+length(n0)
+```
+
+we recursively multiply $G$ and $n0$, projecting the population forwards for 8 steps.
+
+```{r}
+result <- project(init=n0, pmat=G, nsteps=8)
+
+proj.slov <- t(result[,seq(1,ncol(result),2)])
+proj.ryog <- t(result[,seq(2,ncol(result),2)])
+rownames(proj.slov) <- rownames(proj.ryog) <- seq(0,85,5)
+colnames(proj.slov) <- colnames(proj.ryog) <- seq(1961,2001,5)
+
+proj.slov # Projection for Solvenia, 1961-2001
+proj.ryog # Projection for rest of Yugoslavia, 1961-2001.
+
+```
+
+Replication final subtable table 3.2, pg. 67:
+
+**Projected population distribution 2001**
+
+```{r}
+proj.t01 <- cbind(proj.slov[,9], proj.ryog[,9])
+proj.t01 <- cbind(rowSums(proj.t01), proj.t01)
+colnames(proj.t01) <- c('total', 'slovenia', 'r.yogos')
+round(proj.t01)
+```
+
+**Projected percentage population distribution 2001**
+
+```{r}
+round(prop.table(proj.t01, 2) * 100, 4)
+```
+
+
+
+# Custom functions
+
+## Multistate lifetable functions
+
+```{r}
+transfer_rates
+transfer_prob
+expected_survivors
+years_lived
+survivor_prop
+birth_prop
+```
+
+## Projection functions
+
+```{r}
+leslie
+project
+plot_proj
+```
+
+
+## Helper functions
+
+```{r}
+state_table
+collapse_interval
+```
+
+
