@@ -3,6 +3,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=9" >
 
 <title>Replication multiregional population projection Willekens &amp; Rogers (1978)</title>
 
@@ -195,6 +196,7 @@ hljs.initHighlightingOnLoad();
 <li>Calculation of the fertility proportions \( B_x \), based on \( P_x \), \( S_x \) and the observed fertility rates.</li>
 <li>Construction of generalized Leslie matrix \( G \) based on \( S_x \) and \( B_x \).</li>
 <li>Projection using initial population \( n_0 \) and \( G \).</li>
+<li>Deriving the stable equivalent population using eigenvalue decomposition of \( G \).</li>
 </ol>
 
 <h2>1. Observed population characteristics</h2>
@@ -283,8 +285,8 @@ hljs.initHighlightingOnLoad();
 
 <p>Table 2.1 (p. 22) presents \( P_x \), the <strong>probabilities of dying and outmigrating</strong> (or transfer probabilities). The calculation is presented in section 2.7, based on the observed death and migration rates (section 1).</p>
 
-<pre><code class="r">M &lt;- transfer_rates(DR, MR)
-P &lt;- transfer_prob(M)
+<pre><code class="r">M &lt;- transfer_matrix(M.obs, multiple = TRUE)
+P &lt;- transfer_prob(M, multiple = TRUE)
 
 ages &lt;- seq(0, 85, 5)
 states &lt;- c(&quot;slovenia&quot;, &quot;r.yugos&quot;)
@@ -430,7 +432,7 @@ L_z = M_z^{-1} \hat{l}_z
 <p>where \( M_z \) is the matrix containg the observed transtion rates for the last age interval.</p>
 
 <pre><code class="r">
-L.dur &lt;- years_lived(L.surv)
+L.dur &lt;- years_lived(L.surv, M)
 
 # duration/number of years lived in each region, for Slov.
 state_table(L.dur, 1, ages, states)
@@ -666,14 +668,14 @@ round(state_table(B, 2, head(ages, -1), states), 6)
 
 <p>We construct \( G \) by combining \( B_x \) and \( S_x \), resulting in a 36x36 matrix.</p>
 
-<pre><code class="r">G &lt;- leslie(B, S)
+<pre><code class="r">G &lt;- projection_matrix(B, S)
 dim(G)
 </code></pre>
 
 <pre><code>## [1] 36 36
 </code></pre>
 
-<h2>Multiregional population projection</h2>
+<h3>3.2 The projection process</h3>
 
 <p>The initial population is the observed population at \( t_0 \), formated as a vector of length 36 with 2 regions nested within 18 age-groups.</p>
 
@@ -798,24 +800,69 @@ round(proj.t01)
 ## 85 1.0574   0.8404  1.0760
 </code></pre>
 
+<h3>3.3 The stable equivalent population</h3>
+
+<p>We can approximate the stable equivalent to the original population by projecting \( n0 \) foward a sufficiently large number of steps. This reproduces the percentage distribution of the stable equivalent population, shown in Table 3.3. (p. 70).</p>
+
+<pre><code class="r">round(stablepop_pct(n0, G) * 100, 4)
+</code></pre>
+
+<pre><code>##         [,1]  [,2]
+##  [1,] 7.5419 8.860
+##  [2,] 7.2574 8.094
+##  [3,] 7.0671 7.826
+##  [4,] 6.9926 7.556
+##  [5,] 7.0459 7.275
+##  [6,] 7.0198 6.995
+##  [7,] 6.8666 6.723
+##  [8,] 6.6895 6.455
+##  [9,] 6.5002 6.181
+## [10,] 6.2642 5.892
+## [11,] 5.9789 5.569
+## [12,] 5.6665 5.187
+## [13,] 5.2791 4.708
+## [14,] 4.6948 4.088
+## [15,] 3.8212 3.293
+## [16,] 2.7494 2.381
+## [17,] 1.5915 1.479
+## [18,] 0.9734 1.440
+</code></pre>
+
 <h1>Custom functions</h1>
 
 <h2>Multistate lifetable functions</h2>
 
-<pre><code class="r">transfer_rates
+<pre><code class="r">transfer_matrix
 </code></pre>
 
-<pre><code>## function (death_rates, migration_rates) 
+<pre><code>## function (observed_rates, multiple = TRUE, absorbing_state = &quot;last&quot;) 
 ## {
-##     n_age &lt;- nrow(death_rates)
+##     n_states &lt;- ncol(observed_rates) - 3 - 1
+##     n_ages &lt;- nrow(observed_rates)/n_states
+##     ages &lt;- unique(observed_rates[, 1])
+##     if (absorbing_state == &quot;last&quot;) {
+##         absorbing &lt;- n_states + 1
+##     }
+##     Md.cols &lt;- matrix(observed_rates[, 3 + n_states + 1], ncol = n_states)
+##     Mx.cols &lt;- observed_rates[, 4:(3 + n_states)]
+##     Md &lt;- list()
+##     for (i in 1:n_ages) {
+##         Md[[i]] &lt;- diag(Md.cols[i, ])
+##     }
+##     Mx &lt;- list()
+##     i &lt;- 1
+##     for (x in ages) {
+##         Mx[[i]] &lt;- t(Mx.cols[observed_rates[, 1] == x, ])
+##         i &lt;- i + 1
+##     }
+##     Mx_it &lt;- lapply(lapply(Mx, colSums), diag)
 ##     M &lt;- list()
-##     OR &lt;- death_rates + migration_rates
-##     for (x in 1:n_age) {
-##         Mx &lt;- diag(OR[x, ])
-##         Mx[2, 1] &lt;- -MR[x, 1]
-##         Mx[1, 2] &lt;- -MR[x, 2]
-##         colnames(Mx) &lt;- colnames(death_rates)
-##         M[[x]] &lt;- Mx
+##     for (i in 1:n_ages) {
+##         M[[i]] &lt;- Md[[i]] + Mx_it[[i]]
+##         M[[i]] &lt;- M[[i]] + (Mx[[i]] * -1)
+##     }
+##     if (!multiple) {
+##         M[[n_ages]] &lt;- Md[[n_ages]]
 ##     }
 ##     M
 ## }
@@ -824,15 +871,24 @@ round(proj.t01)
 <pre><code class="r">transfer_prob
 </code></pre>
 
-<pre><code>## function (transfer_rates) 
+<pre><code>## function (transfer_rates, multiple = TRUE) 
 ## {
-##     n_age &lt;- length(transfer_rates)
-##     n_state &lt;- ncol(transfer_rates[[1]])
-##     I &lt;- diag(rep(1, n_state))
-##     P &lt;- lapply(transfer_rates, function(Mx) {
-##         solve(I + 2.5 * Mx) %*% (I - 2.5 * Mx)
-##     })
-##     P[[n_age]] &lt;- P[[n_age]] * 0
+##     n_ages &lt;- length(transfer_rates)
+##     n_states &lt;- ncol(transfer_rates[[1]])
+##     I &lt;- diag(rep(1, n_states))
+##     if (!multiple) {
+##         P &lt;- lapply(transfer_rates, function(Mx) {
+##             Mx_t &lt;- t(Mx)
+##             Mx_t.diag &lt;- diag(diag(Mx_t))
+##             t(I - 5 * solve(I + 2.5 * Mx_t.diag) %*% Mx_t)
+##         })
+##     }
+##     if (multiple) {
+##         P &lt;- lapply(transfer_rates, function(Mx) {
+##             solve(I + 2.5 * Mx) %*% (I - 2.5 * Mx)
+##         })
+##     }
+##     P[[n_ages]] &lt;- P[[n_ages]] * 0
 ##     P
 ## }
 </code></pre>
@@ -855,8 +911,10 @@ round(proj.t01)
 <pre><code class="r">years_lived
 </code></pre>
 
-<pre><code>## function (expected_survivors) 
+<pre><code>## function (expected_survivors, transfer_rates) 
 ## {
+##     L.surv &lt;- expected_survivors
+##     Mx &lt;- transfer_rates
 ##     n_ages &lt;- length(L.surv)
 ##     L.surv &lt;- expected_survivors
 ##     L.dur &lt;- list()
@@ -864,7 +922,7 @@ round(proj.t01)
 ##         L.dur[[x]] &lt;- 2.5 * (L.surv[[x]] + L.surv[[x + 1]]) %*% 
 ##             solve(L.surv[[1]])
 ##     }
-##     L.dur[[n_ages]] &lt;- solve(M[[n_ages]]) %*% L.surv[[n_ages]] %*% 
+##     L.dur[[n_ages]] &lt;- solve(Mx[[n_ages]]) %*% L.surv[[n_ages]] %*% 
 ##         solve(L.surv[[1]])
 ##     L.dur
 ## }
@@ -888,16 +946,16 @@ round(proj.t01)
 
 <pre><code>## function (birth_rates, transition_probs, survivor_prop) 
 ## {
-##     n_age &lt;- nrow(birth_rates)
-##     n_state &lt;- ncol(birth_rates)
-##     I &lt;- diag(rep(1, n_state))
-##     F &lt;- birth_rates
+##     n_ages &lt;- length(transition_probs)
+##     n_states &lt;- ncol(transition_probs[[1]])
+##     I &lt;- diag(rep(1, n_states))
 ##     P &lt;- transition_probs
 ##     S &lt;- survivor_prop
+##     F &lt;- matrix(birth_rates, ncol = n_states)
 ##     B &lt;- list()
-##     for (x in 1:(n_age - 1)) {
-##         Fx &lt;- diag(unlist(F[x, 1:n_state]))
-##         Fx5 &lt;- diag(unlist(F[x + 1, 1:n_state]))
+##     for (x in 1:(n_ages - 1)) {
+##         Fx &lt;- diag(unlist(F[x, 1:n_states]))
+##         Fx5 &lt;- diag(unlist(F[x + 1, 1:n_states]))
 ##         B[[x]] &lt;- 5/4 * (P[[1]] + I) %*% (Fx + Fx5 %*% S[[x]])
 ##     }
 ##     B
@@ -906,22 +964,26 @@ round(proj.t01)
 
 <h2>Projection functions</h2>
 
-<pre><code class="r">leslie
+<pre><code class="r">projection_matrix
 </code></pre>
 
 <pre><code>## function (fertility, survivorship) 
 ## {
 ##     B &lt;- fertility
 ##     S &lt;- survivorship
-##     n_ages &lt;- length(B)
-##     G &lt;- diag(rep(0, n_ages * 2))
+##     n_ages &lt;- length(B) + 1
+##     n_states &lt;- ncol(B[[1]])
+##     G &lt;- diag(rep(0, n_ages * n_states))
 ##     j &lt;- 1
-##     for (i in seq(1, n_ages * 2, 2)) {
-##         G[i:(i + 1), i:(i + 1)] &lt;- S[[j]]
+##     i_start &lt;- head(seq(1, (n_ages * n_states), n_states), -1)
+##     mwidth &lt;- n_states - 1
+##     for (i in i_start) {
+##         G[i:(i + mwidth), i:(i + mwidth)] &lt;- S[[j]]
 ##         j &lt;- j + 1
 ##     }
+##     B[[(n_ages)]] &lt;- diag(rep(0, n_states))
 ##     G &lt;- rbind(do.call(cbind, B), G)
-##     G &lt;- cbind(G, matrix(rep(0, 36 * 2), ncol = 2, nrow = 36))
+##     G &lt;- G[1:(n_ages * n_states), ]
 ##     G
 ## }
 </code></pre>

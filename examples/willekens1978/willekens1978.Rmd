@@ -1,8 +1,8 @@
 # Replication multiregional population projection Willekens & Rogers (1978)
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-setwd('C:/Users/MaHermans/Documents/work/CELLO/publications/aggr_mob_be')
-source('analyse/projection.r')
+setwd('C:/Users/MaHermans/Documents/GitHub/mstls/')
+source('mstls/functions.r')
 ```
 
 
@@ -16,6 +16,7 @@ Central steps multiregional/state population projection model:
 6. Calculation of the fertility proportions $B_x$, based on $P_x$, $S_x$ and the observed fertility rates.
 7. Construction of generalized Leslie matrix $G$ based on $S_x$ and $B_x$.
 8. Projection using initial population $n_0$ and $G$.
+9. Deriving the stable equivalent population using eigenvalue decomposition of $G$.
 
 ## 1. Observed population characteristics
 
@@ -124,6 +125,23 @@ MR <- cbind(
 
 colnames(MR) <- colnames(FR) <- colnames(DR) <- c('slovenia', 'r.yogos')
 
+# Merge DR, MR into single "long" transition matrix
+M.obs <- cbind(
+  rbind(
+    cbind(rep(0, 18), MR[,1]),
+    cbind(MR[,2], rep(0, 18))
+    ),
+  c(DR[,1], DR[,2])
+  )
+
+M.obs <- cbind(
+  rep(seq(0,85,5),2),
+  rep(seq(4,89,5),2),
+  c(rep(1,18), rep(2,18)),
+  M.obs)
+
+colnames(M.obs) <- c('x', 'xn', 'i', 'Mx_1i', 'Mx_2i', 'Mxd_i')
+
 ```
 
 Replicate Table 1.3 "Observed rates", pg. 11-12
@@ -153,8 +171,8 @@ round(MR, 6)
 Table 2.1 (p. 22) presents $P_x$, the **probabilities of dying and outmigrating** (or transfer probabilities). The calculation is presented in section 2.7, based on the observed death and migration rates (section 1).
 
 ```{r}
-M <- transfer_rates(DR, MR)
-P <- transfer_prob(M)
+M <- transfer_matrix(M.obs, multiple=TRUE)
+P <- transfer_prob(M, multiple=TRUE)
 
 ages <- seq(0,85,5)
 states <- c('slovenia', 'r.yugos')
@@ -216,7 +234,7 @@ where $M_z$ is the matrix containg the observed transtion rates for the last age
 
 ```{r}
 
-L.dur <- years_lived(L.surv)
+L.dur <- years_lived(L.surv, M)
 
  # duration/number of years lived in each region, for Slov.
 state_table(L.dur,1, ages, states)
@@ -328,13 +346,13 @@ round(state_table(B,2, head(ages, -1), states), 6)
 We construct $G$ by combining $B_x$ and $S_x$, resulting in a 36x36 matrix.
 
 ```{r}
-G <- leslie(B, S)
+G <- projection_matrix(B, S)
 dim(G)
 ```
 
 
 
-## Multiregional population projection
+### 3.2 The projection process
 
 The initial population is the observed population at $t_0$, formated as a vector of length 36 with 2 regions nested within 18 age-groups.
 
@@ -376,13 +394,22 @@ round(prop.table(proj.t01, 2) * 100, 4)
 ```
 
 
+### 3.3 The stable equivalent population
+
+We can approximate the stable equivalent to the original population by projecting $n0$ foward a sufficiently large number of steps. This reproduces the percentage distribution of the stable equivalent population, shown in Table 3.3. (p. 70).
+
+```{r}
+round(stablepop_pct(n0, G) * 100, 4)
+```
+
+
 
 # Custom functions
 
 ## Multistate lifetable functions
 
 ```{r}
-transfer_rates
+transfer_matrix
 transfer_prob
 expected_survivors
 years_lived
@@ -393,7 +420,7 @@ birth_prop
 ## Projection functions
 
 ```{r}
-leslie
+projection_matrix
 project
 plot_proj
 ```

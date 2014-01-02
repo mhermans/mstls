@@ -14,6 +14,7 @@ Central steps multiregional/state population projection model:
 6. Calculation of the fertility proportions $B_x$, based on $P_x$, $S_x$ and the observed fertility rates.
 7. Construction of generalized Leslie matrix $G$ based on $S_x$ and $B_x$.
 8. Projection using initial population $n_0$ and $G$.
+9. Deriving the stable equivalent population using eigenvalue decomposition of $G$.
 
 ## 1. Observed population characteristics
 
@@ -127,8 +128,8 @@ Table 2.1 (p. 22) presents $P_x$, the **probabilities of dying and outmigrating*
 
 
 ```r
-M <- transfer_rates(DR, MR)
-P <- transfer_prob(M)
+M <- transfer_matrix(M.obs, multiple = TRUE)
+P <- transfer_prob(M, multiple = TRUE)
 
 ages <- seq(0, 85, 5)
 states <- c("slovenia", "r.yugos")
@@ -288,7 +289,7 @@ where $M_z$ is the matrix containg the observed transtion rates for the last age
 
 ```r
 
-L.dur <- years_lived(L.surv)
+L.dur <- years_lived(L.surv, M)
 
 # duration/number of years lived in each region, for Slov.
 state_table(L.dur, 1, ages, states)
@@ -544,7 +545,7 @@ We construct $G$ by combining $B_x$ and $S_x$, resulting in a 36x36 matrix.
 
 
 ```r
-G <- leslie(B, S)
+G <- projection_matrix(B, S)
 dim(G)
 ```
 
@@ -555,7 +556,7 @@ dim(G)
 
 
 
-## Multiregional population projection
+### 3.2 The projection process
 
 The initial population is the observed population at $t_0$, formated as a vector of length 36 with 2 regions nested within 18 age-groups.
 
@@ -699,6 +700,39 @@ round(prop.table(proj.t01, 2) * 100, 4)
 
 
 
+### 3.3 The stable equivalent population
+
+We can approximate the stable equivalent to the original population by projecting $n0$ foward a sufficiently large number of steps. This reproduces the percentage distribution of the stable equivalent population, shown in Table 3.3. (p. 70).
+
+
+```r
+round(stablepop_pct(n0, G) * 100, 4)
+```
+
+```
+##         [,1]  [,2]
+##  [1,] 7.5419 8.860
+##  [2,] 7.2574 8.094
+##  [3,] 7.0671 7.826
+##  [4,] 6.9926 7.556
+##  [5,] 7.0459 7.275
+##  [6,] 7.0198 6.995
+##  [7,] 6.8666 6.723
+##  [8,] 6.6895 6.455
+##  [9,] 6.5002 6.181
+## [10,] 6.2642 5.892
+## [11,] 5.9789 5.569
+## [12,] 5.6665 5.187
+## [13,] 5.2791 4.708
+## [14,] 4.6948 4.088
+## [15,] 3.8212 3.293
+## [16,] 2.7494 2.381
+## [17,] 1.5915 1.479
+## [18,] 0.9734 1.440
+```
+
+
+
 
 # Custom functions
 
@@ -706,21 +740,38 @@ round(prop.table(proj.t01, 2) * 100, 4)
 
 
 ```r
-transfer_rates
+transfer_matrix
 ```
 
 ```
-## function (death_rates, migration_rates) 
+## function (observed_rates, multiple = TRUE, absorbing_state = "last") 
 ## {
-##     n_age <- nrow(death_rates)
+##     n_states <- ncol(observed_rates) - 3 - 1
+##     n_ages <- nrow(observed_rates)/n_states
+##     ages <- unique(observed_rates[, 1])
+##     if (absorbing_state == "last") {
+##         absorbing <- n_states + 1
+##     }
+##     Md.cols <- matrix(observed_rates[, 3 + n_states + 1], ncol = n_states)
+##     Mx.cols <- observed_rates[, 4:(3 + n_states)]
+##     Md <- list()
+##     for (i in 1:n_ages) {
+##         Md[[i]] <- diag(Md.cols[i, ])
+##     }
+##     Mx <- list()
+##     i <- 1
+##     for (x in ages) {
+##         Mx[[i]] <- t(Mx.cols[observed_rates[, 1] == x, ])
+##         i <- i + 1
+##     }
+##     Mx_it <- lapply(lapply(Mx, colSums), diag)
 ##     M <- list()
-##     OR <- death_rates + migration_rates
-##     for (x in 1:n_age) {
-##         Mx <- diag(OR[x, ])
-##         Mx[2, 1] <- -MR[x, 1]
-##         Mx[1, 2] <- -MR[x, 2]
-##         colnames(Mx) <- colnames(death_rates)
-##         M[[x]] <- Mx
+##     for (i in 1:n_ages) {
+##         M[[i]] <- Md[[i]] + Mx_it[[i]]
+##         M[[i]] <- M[[i]] + (Mx[[i]] * -1)
+##     }
+##     if (!multiple) {
+##         M[[n_ages]] <- Md[[n_ages]]
 ##     }
 ##     M
 ## }
@@ -731,15 +782,24 @@ transfer_prob
 ```
 
 ```
-## function (transfer_rates) 
+## function (transfer_rates, multiple = TRUE) 
 ## {
-##     n_age <- length(transfer_rates)
-##     n_state <- ncol(transfer_rates[[1]])
-##     I <- diag(rep(1, n_state))
-##     P <- lapply(transfer_rates, function(Mx) {
-##         solve(I + 2.5 * Mx) %*% (I - 2.5 * Mx)
-##     })
-##     P[[n_age]] <- P[[n_age]] * 0
+##     n_ages <- length(transfer_rates)
+##     n_states <- ncol(transfer_rates[[1]])
+##     I <- diag(rep(1, n_states))
+##     if (!multiple) {
+##         P <- lapply(transfer_rates, function(Mx) {
+##             Mx_t <- t(Mx)
+##             Mx_t.diag <- diag(diag(Mx_t))
+##             t(I - 5 * solve(I + 2.5 * Mx_t.diag) %*% Mx_t)
+##         })
+##     }
+##     if (multiple) {
+##         P <- lapply(transfer_rates, function(Mx) {
+##             solve(I + 2.5 * Mx) %*% (I - 2.5 * Mx)
+##         })
+##     }
+##     P[[n_ages]] <- P[[n_ages]] * 0
 ##     P
 ## }
 ```
@@ -766,8 +826,10 @@ years_lived
 ```
 
 ```
-## function (expected_survivors) 
+## function (expected_survivors, transfer_rates) 
 ## {
+##     L.surv <- expected_survivors
+##     Mx <- transfer_rates
 ##     n_ages <- length(L.surv)
 ##     L.surv <- expected_survivors
 ##     L.dur <- list()
@@ -775,7 +837,7 @@ years_lived
 ##         L.dur[[x]] <- 2.5 * (L.surv[[x]] + L.surv[[x + 1]]) %*% 
 ##             solve(L.surv[[1]])
 ##     }
-##     L.dur[[n_ages]] <- solve(M[[n_ages]]) %*% L.surv[[n_ages]] %*% 
+##     L.dur[[n_ages]] <- solve(Mx[[n_ages]]) %*% L.surv[[n_ages]] %*% 
 ##         solve(L.surv[[1]])
 ##     L.dur
 ## }
@@ -803,16 +865,16 @@ birth_prop
 ```
 ## function (birth_rates, transition_probs, survivor_prop) 
 ## {
-##     n_age <- nrow(birth_rates)
-##     n_state <- ncol(birth_rates)
-##     I <- diag(rep(1, n_state))
-##     F <- birth_rates
+##     n_ages <- length(transition_probs)
+##     n_states <- ncol(transition_probs[[1]])
+##     I <- diag(rep(1, n_states))
 ##     P <- transition_probs
 ##     S <- survivor_prop
+##     F <- matrix(birth_rates, ncol = n_states)
 ##     B <- list()
-##     for (x in 1:(n_age - 1)) {
-##         Fx <- diag(unlist(F[x, 1:n_state]))
-##         Fx5 <- diag(unlist(F[x + 1, 1:n_state]))
+##     for (x in 1:(n_ages - 1)) {
+##         Fx <- diag(unlist(F[x, 1:n_states]))
+##         Fx5 <- diag(unlist(F[x + 1, 1:n_states]))
 ##         B[[x]] <- 5/4 * (P[[1]] + I) %*% (Fx + Fx5 %*% S[[x]])
 ##     }
 ##     B
@@ -824,7 +886,7 @@ birth_prop
 
 
 ```r
-leslie
+projection_matrix
 ```
 
 ```
@@ -832,15 +894,19 @@ leslie
 ## {
 ##     B <- fertility
 ##     S <- survivorship
-##     n_ages <- length(B)
-##     G <- diag(rep(0, n_ages * 2))
+##     n_ages <- length(B) + 1
+##     n_states <- ncol(B[[1]])
+##     G <- diag(rep(0, n_ages * n_states))
 ##     j <- 1
-##     for (i in seq(1, n_ages * 2, 2)) {
-##         G[i:(i + 1), i:(i + 1)] <- S[[j]]
+##     i_start <- head(seq(1, (n_ages * n_states), n_states), -1)
+##     mwidth <- n_states - 1
+##     for (i in i_start) {
+##         G[i:(i + mwidth), i:(i + mwidth)] <- S[[j]]
 ##         j <- j + 1
 ##     }
+##     B[[(n_ages)]] <- diag(rep(0, n_states))
 ##     G <- rbind(do.call(cbind, B), G)
-##     G <- cbind(G, matrix(rep(0, 36 * 2), ncol = 2, nrow = 36))
+##     G <- G[1:(n_ages * n_states), ]
 ##     G
 ## }
 ```
