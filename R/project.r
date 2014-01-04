@@ -1,4 +1,16 @@
 
+#' @title Project an intial multistate population forward using G
+#' 
+#' @description \code{project} takes a intitial multistate population vector and projects it forward using the generalized
+#' Leslie matrix \code{G}.
+#' 
+#' @param init initial population vector, stacked per state
+#' @param pmat projection matrix/generalized Leslie matrix G
+#' @param nsteps number of steps to project forward
+#' @param lbls optional labels for the age groups
+#' @return matrix with the population vectors in the columns
+#' @keywords manip
+#' @export
 project <- function(init, pmat, nsteps, lbls=NULL) {
   # linear, time-invariant projection
   

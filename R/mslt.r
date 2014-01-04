@@ -1,9 +1,15 @@
 
-# ============================== #
-# MULTISTATE LIFETABLE FUNCTIONS #
-# ============================== #
-
-
+#' @title Construct Mx, the matrix of observed transfer rates
+#' 
+#' @description \code{transfer_matrix} returns a list with age-specific transfer-rate matrices Mx,
+#' based on the observed death and outmigration rates per state.
+#' 
+#' @param observed_rates dataframe or matrix with the observed rates, stacked per state (see Details) 
+#' @param multiple allow for multiple transitions between states during an interval (default TRUE)
+#' @param absorbing_state Indicate which state, if any, is the absorbing state (currently not used)
+#' @return list of Mx matrices
+#' @keywords manip
+#' @export
 transfer_matrix <- function(observed_rates, multiple=TRUE, absorbing_state="last") {
   # Construct Mx, the matrix of observed transfer rates based on the 
   # observed death and outmigration rates. 
@@ -79,13 +85,17 @@ transfer_matrix <- function(observed_rates, multiple=TRUE, absorbing_state="last
 }
 
 
-
+#' @title Calculate age-specific state transfer probabilities Px.
+#' 
+#' @description \code{transfer_prob} returns a list of age-specific transfer probabilities matrices Px,
+#' based on observed transfer rates (death and outmigration) structured in the transition matrices Mx. 
+#' It allows for single or multiple transitions per interval.
+#' @param transfer_rates list of transfer matrices Mx, orderd by age x
+#' @param multiple allow for multiple transitions between states during an interval (default TRUE)
+#' @return list of Px matrices
+#' @keywords manip
+#' @export 
 transfer_prob <- function(transfer_rates, multiple=TRUE) {
-  # ================================================================== #
-  # Calculate age-specific probabilities of first transfer Px,         #
-  # based on observed observed transfer (death and outmigration) rates #
-  # structured in the Mx matrix (allows multiple transitions)          #
-  # ================================================================== #
   
   n_ages <- length(transfer_rates)
   n_states <- ncol(transfer_rates[[1]])
@@ -128,7 +138,16 @@ transfer_prob <- function(transfer_rates, multiple=TRUE) {
 }
 
 
-
+#' @title Calculate lx, the expected number of survivors at exact age x
+#' 
+#' @description \code{expected_survivors} returns a list with \code{lx} matrices, containing the expected number of survivors 
+#' at exact age x, based on the list of transition probability matrices \code{Px}.
+#' 
+#' @param transition_probs list of transition probabilities Px, ordered by age x 
+#' @param radix radix (default 100000)
+#' @return list of lx matrices
+#' @keywords manip
+#' @export
 expected_survivors <- function(transition_probs, radix=100000) {
   # Calculate the expected number of survivors at exact age x,
   # based on the transition probabilities give radix/unit
@@ -147,6 +166,16 @@ expected_survivors <- function(transition_probs, radix=100000) {
 }
 
 
+#' @title Calculate Lx, number of years lived in each state by unit birth cohort
+#' 
+#' @description \code{years_lived} returns a list with \code{Lx} matrices, containing the number of years lived 
+#' in each state by unit birth cohort, based on the number of survivors \code{lx} and the transfer matrices \code{Mx}.
+#' 
+#' @param expected_survivors list of number of survivor matrices \code{lx}, ordered by age x 
+#' @param transfer_rates list of transfer-rate matrices Mx, orderd by age x
+#' @return list of Lx matrices
+#' @keywords manip
+#' @export
 years_lived <- function(expected_survivors, transfer_rates) {
   # Calculate number of years lived in each state by unit birth cohort
   # based on the matrices giving the expected number of survivors,
@@ -176,6 +205,15 @@ years_lived <- function(expected_survivors, transfer_rates) {
 }
 
 
+#' @title Calculate Sx, the proportion of survivors for each age x and state
+#' 
+#' @description \code{survivor_prop} returns a list with \code{Sx} matrices, containing the proportion of survivors,
+#' based on the years lived in each state \code{Lx}.
+#' 
+#' @param years_lived list of years lived matrices \code{Lx}, ordered by age x 
+#' @return list of Sx matrices
+#' @keywords manip
+#' @export
 survivor_prop <- function(years_lived) {
   # Calculate the proportion of survivors based on the number
   # of years lived.
@@ -194,6 +232,17 @@ survivor_prop <- function(years_lived) {
 }
 
 
+#' @title Calculate Bx, the proportion of births for each age x and state
+#' 
+#' @description \code{birth_prop} returns a list with \code{Bx} matrices containing the proportion of births,
+#' based on the birth rates \code{Fx}, the transition probabilities \code{Px} and the survivorship proportion \code{Sx}.
+#' 
+#' @param birth_rates a vector of age-specific birth rates, stacked per state 
+#' @param transition_probs list of transtion probability matrices Mx, orderd by age x
+#' @param survivor_prop list of survivorship proportions matrices Sx, orderd by age x
+#' @return list of Bx matrices
+#' @keywords manip
+#' @export
 birth_prop <- function(birth_rates, transition_probs, survivor_prop) {
   # Calculate proportion of births based on the observed fertility rate,
   # the transition probabilities and the proportion of survivors 
@@ -222,11 +271,22 @@ birth_prop <- function(birth_rates, transition_probs, survivor_prop) {
   
 }
 
-projection_matrix <- function(fertility, survivorship) {
+
+#' @title Construct the generalized Leslie matrix G
+#' 
+#' @description \code{projection_matrix} combines the birth (\code{Bx}) and survivorship (\code{Sx}) proportions into
+#' a generalized Leslie matrix \code{G}.
+#' 
+#' @param birth_prop list of birth proportions matrices Bx, orderd by age x
+#' @param survivor_prop list of survivorship proportions matrices Sx, orderd by age x
+#' @return matrix G
+#' @keywords manip
+#' @export
+projection_matrix <- function(birth_prop, survivor_prop) {
   # Construction a generalized Leslie matrix/projection matrix G
   
-  B <- fertility
-  S <- survivorship
+  B <- birth_prop
+  S <- survivor_prop
   
   # S & B matrices do not contain last interval => n-1
   n_ages <- length(B) + 1 

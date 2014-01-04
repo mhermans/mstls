@@ -1,0 +1,8 @@
+export(birth_prop)
+export(expected_survivors)
+export(project)
+export(projection_matrix)
+export(survivor_prop)
+export(transfer_matrix)
+export(transfer_prob)
+export(years_lived)
