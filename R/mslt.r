@@ -1,15 +1,3 @@
-# Projection functions
-# --------------------
-
-library(ggplot2)
-library(reshape)
-library(stringr)
-#library(expm) # needed for %^% operator
-
-# Based on:
-# - Willekens, F. & Rogers, A. (1978), Spatial Population Analyssi: Methods and Computer Programs. IASSA: Laxenburg, Austria.
-# - Rogers, A. (1975), Introduction to Multiregional Mathematical Demography. John Wiley & Sons: New York.
-# - Schoen, R. (1988), Modeling Multigroup Populations. Plenus Press: New York.
 
 # ============================== #
 # MULTISTATE LIFETABLE FUNCTIONS #
@@ -234,12 +222,6 @@ birth_prop <- function(birth_rates, transition_probs, survivor_prop) {
   
 }
 
-
-# ================= #
-# UTILITY FUNCTIONS #
-# ================= #
-
-
 projection_matrix <- function(fertility, survivorship) {
   # Construction a generalized Leslie matrix/projection matrix G
   
@@ -269,105 +251,4 @@ projection_matrix <- function(fertility, survivorship) {
   
   G
   
-}
-
-
-project <- function(init, pmat, nsteps, lbls=NULL) {
-  # linear, time-invariant projection
-  
-  nclasses <- length(init)
-  pops <- matrix(nrow=nsteps + 1, ncol=nclasses)
-  
-  colnames(pops) <- lbls
-  rownames(pops) <- paste('t', seq(0, nsteps), sep='')
-  
-  pops[1,] <- init
-  
-  
-  # iterate for intermediate values, else: A %^% nsteps %*% n0
-  i <- nsteps
-  n <- init
-  while (i > 0) {
-    n <- pmat %*% n
-    pops[nsteps + 2 - i,] <- n
-    i <- i - 1
-  }
-  
-  pops
-}
-
-
-plot_proj <- function(proj_result){
-  # projection results: plot absolute numbers and proportions
-  
-  p_num <- melt(proj_result)
-  p_num$type <- rep('num', nrow(p_num))
-  
-  p_prop <- proj_result/rowSums(proj_result)
-  p_prop <- melt(p_prop)
-  p_prop$type <- rep('prop', nrow(p_prop))
-  
-  p <- rbind(p_num, p_prop)
-  names(p) <- c('tlabel', 'class', 'value', 'type')
-  p$time <- as.integer(str_replace(p$tlabel, 't', ''))
-  
-  q <- ggplot(p, aes(x=time, y=value, group=class, colour=class))
-  q <- q + geom_line() + facet_grid(.~type)
-  
-  q
-}
-
-
-collapse_interval <- function(df, interval=5) {
-  # collapse a DF with 1 row per age to intervals
-  
-  max_age <- nrow(df)
-  ages <- seq(0, max_age, interval)
-  
-  l <- list()
-  for (i in ages) {
-    l <- cbind(l, colSums(df[i:(i+(interval-1)),]))
-  }
-  
-  df_i <- data.frame(matrix(unlist(l), nrow=length(ages), byrow=T))
-  rownames(df_i) <- paste(ages, ages + (interval-1), sep='-')
-  colnames(df_i) <- colnames(df)
-  
-  df_i
-}
-
-
-state_table <- function(data, nstate, rlbl, clbl) { 
-  # Extract single state from multistate nested matrix
-  
-  tab <- do.call(rbind, lapply(data, function(x) x[,nstate])) 
-  
-  if ( missing(rlbl) ) {
-    rlbl <- 1:length(data)
-  }
-  
-  if ( missing(clbl) ) {
-    clbl <- colnames(data[[1]])
-  }
-  
-  # TODO: add col, rownames parameter
-  rownames(tab) <- rlbl
-  colnames(tab) <- clbl
-  
-  tab
-  
-}
-
-stablepop_pct <- function(init, pmat, nsteps=500) {
-  # calculate pct. distr. for approx. stable equvalent population
-  
-  tn <- project(init=init, pmat=pmat, nsteps=nsteps)
-  tn_1 <- t(tn[,seq(1,ncol(tn),2)])
-  tn_2 <- t(tn[,seq(2,ncol(tn),2)])
-  n1 <- tn_1[,ncol(tn_1)]
-  n2 <- tn_2[,ncol(tn_2)]
-  
-  spop_pct <- cbind(n1/sum(n1),n2/sum(n2))
-  
-  spop_pct
 }

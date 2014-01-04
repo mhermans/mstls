@@ -1,0 +1,16 @@
+Package: mstls
+Title: Tools for working with multistate social demographic data
+Version: 0.0.1.99
+Author: Maarten Hermans <maarten.hermans@uantwerpen.be>
+Author: Maarten Hermans <maarten.hermans@uantwerpen.be>
+Description: Functions for a.o. calculating multistate life tables and projection.
+Depends:
+    R (>= 2.14.0)
+Imports:
+    ggplot2,
+    stringr,
+    reshape
+Suggests:
+    biopop
+License: GPL (>= 2)
+
