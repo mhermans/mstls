@@ -6,7 +6,7 @@ years_lived(expected_survivors, transfer_rates)
 }
 \arguments{
   \item{expected_survivors}{list of number of survivor
-  matrices \code{Px}, ordered by age x}
+  matrices \code{lx}, ordered by age x}
 
   \item{transfer_rates}{list of transfer-rate matrices Mx,
   orderd by age x}
