@@ -169,7 +169,7 @@ P.sl  # prob. of dying & outmigrating for Slovenia
 ```
 
 ```r
-P.ryu  # prob. of dying & outmigrating for rest of Yugoslavia
+P.ryu  # prob. of dying & outmigrating for rest of Yugoslavia 
 ```
 
 ```
@@ -562,7 +562,7 @@ The initial population is the observed population at $t_0$, formated as a vector
 
 
 ```r
-n0 <- ggplot2:::interleave(SL[, 1], RYU[, 1])
+n0 <- c(SL[, 1], RYU[, 1])
 length(n0)
 ```
 
@@ -575,10 +575,10 @@ we recursively multiply $G$ and $n0$, projecting the population forwards for 8 s
 
 
 ```r
-result <- project(init = n0, pmat = G, nsteps = 8)
+result <- project(init_pop = n0, n_states = 2, pmat = G, n_steps = 8)
 
-proj.slov <- t(result[, seq(1, ncol(result), 2)])
-proj.ryog <- t(result[, seq(2, ncol(result), 2)])
+proj.slov <- result[1:18, ]
+proj.ryog <- result[19:36, ]
 rownames(proj.slov) <- rownames(proj.ryog) <- seq(0, 85, 5)
 colnames(proj.slov) <- colnames(proj.ryog) <- seq(1961, 2001, 5)
 
@@ -706,7 +706,8 @@ We can approximate the stable equivalent to the original population by projectin
 
 
 ```r
-round(stablepop_pct(n0, G) * 100, 4)
+t500 <- project(n0, n_states = 2, pmat = G, n_steps = 500)
+round(prop.table(matrix(t500[, ncol(t500)], ncol = 2), 2) * 100, 4)
 ```
 
 ```
@@ -890,10 +891,10 @@ projection_matrix
 ```
 
 ```
-## function (fertility, survivorship) 
+## function (birth_prop, survivor_prop) 
 ## {
-##     B <- fertility
-##     S <- survivorship
+##     B <- birth_prop
+##     S <- survivor_prop
 ##     n_ages <- length(B) + 1
 ##     n_states <- ncol(B[[1]])
 ##     G <- diag(rep(0, n_ages * n_states))
@@ -916,21 +917,31 @@ project
 ```
 
 ```
-## function (init, pmat, nsteps, lbls = NULL) 
+## function (init_pop, n_states, pmat, n_steps, lbls = NULL) 
 ## {
-##     nclasses <- length(init)
-##     pops <- matrix(nrow = nsteps + 1, ncol = nclasses)
-##     colnames(pops) <- lbls
-##     rownames(pops) <- paste("t", seq(0, nsteps), sep = "")
-##     pops[1, ] <- init
-##     i <- nsteps
-##     n <- init
+##     n_ages <- length(init_pop)/n_states
+##     N0 <- split(init_pop, rep(seq(n_states), each = length(init_pop)/n_states))
+##     N0 <- ggplot2:::interleave(N0)
+##     N.projected <- matrix(nrow = n_steps + 1, ncol = n_ages * 
+##         n_states)
+##     colnames(N.projected) <- rep(lbls, n_states)
+##     rownames(N.projected) <- paste("t", seq(0, n_steps), sep = "")
+##     N.projected[1, ] <- N0
+##     i <- n_steps
+##     n <- N0
 ##     while (i > 0) {
 ##         n <- pmat %*% n
-##         pops[nsteps + 2 - i, ] <- n
+##         N.projected[n_steps + 2 - i, ] <- n
 ##         i <- i - 1
 ##     }
-##     pops
+##     N.list <- list()
+##     N.projected <- t(N.projected)
+##     for (i in 1:n_states) {
+##         N.list[[i]] <- N.projected[seq(i, nrow(N.projected), 
+##             n_states), ]
+##     }
+##     N.projected <- do.call(rbind, N.list)
+##     N.projected
 ## }
 ```
 

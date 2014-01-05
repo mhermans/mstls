@@ -1,8 +1,10 @@
 # Replication multiregional population projection Willekens & Rogers (1978)
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-setwd('C:/Users/MaHermans/Documents/GitHub/mstls/')
-source('mstls/functions.r')
+setwd('/home/mhermans/projects/mstls/')
+source('R/mslt.r')
+source('R/project.r')
+source('R/utils.r')
 ```
 
 
@@ -357,17 +359,17 @@ dim(G)
 The initial population is the observed population at $t_0$, formated as a vector of length 36 with 2 regions nested within 18 age-groups.
 
 ```{r}
-n0 <- ggplot2:::interleave(SL[,1], RYU[,1])
+n0 <- c(SL[,1], RYU[,1])
 length(n0)
 ```
 
 we recursively multiply $G$ and $n0$, projecting the population forwards for 8 steps.
 
 ```{r}
-result <- project(init=n0, pmat=G, nsteps=8)
+result <- project(init_pop=n0, n_states=2, pmat=G, n_steps=8)
 
-proj.slov <- t(result[,seq(1,ncol(result),2)])
-proj.ryog <- t(result[,seq(2,ncol(result),2)])
+proj.slov <- result[1:18,]
+proj.ryog <- result[19:36,]
 rownames(proj.slov) <- rownames(proj.ryog) <- seq(0,85,5)
 colnames(proj.slov) <- colnames(proj.ryog) <- seq(1961,2001,5)
 
@@ -399,7 +401,8 @@ round(prop.table(proj.t01, 2) * 100, 4)
 We can approximate the stable equivalent to the original population by projecting $n0$ foward a sufficiently large number of steps. This reproduces the percentage distribution of the stable equivalent population, shown in Table 3.3. (p. 70).
 
 ```{r}
-round(stablepop_pct(n0, G) * 100, 4)
+t500 <- project(n0, n_states=2, pmat=G, n_steps=500)
+round(prop.table(matrix(t500[,ncol(t500)], ncol=2), 2)* 100, 4)
 ```
 
 

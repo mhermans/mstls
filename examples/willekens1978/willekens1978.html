@@ -324,7 +324,7 @@ P.sl  # prob. of dying &amp; outmigrating for Slovenia
 ## 85 1.000000  0.0000 0.000000
 </code></pre>
 
-<pre><code class="r">P.ryu  # prob. of dying &amp; outmigrating for rest of Yugoslavia
+<pre><code class="r">P.ryu  # prob. of dying &amp; outmigrating for rest of Yugoslavia 
 </code></pre>
 
 <pre><code>##       death   to slov to r.yug
@@ -679,7 +679,7 @@ dim(G)
 
 <p>The initial population is the observed population at \( t_0 \), formated as a vector of length 36 with 2 regions nested within 18 age-groups.</p>
 
-<pre><code class="r">n0 &lt;- ggplot2:::interleave(SL[, 1], RYU[, 1])
+<pre><code class="r">n0 &lt;- c(SL[, 1], RYU[, 1])
 length(n0)
 </code></pre>
 
@@ -688,10 +688,10 @@ length(n0)
 
 <p>we recursively multiply \( G \) and \( n0 \), projecting the population forwards for 8 steps.</p>
 
-<pre><code class="r">result &lt;- project(init = n0, pmat = G, nsteps = 8)
+<pre><code class="r">result &lt;- project(init_pop = n0, n_states = 2, pmat = G, n_steps = 8)
 
-proj.slov &lt;- t(result[, seq(1, ncol(result), 2)])
-proj.ryog &lt;- t(result[, seq(2, ncol(result), 2)])
+proj.slov &lt;- result[1:18, ]
+proj.ryog &lt;- result[19:36, ]
 rownames(proj.slov) &lt;- rownames(proj.ryog) &lt;- seq(0, 85, 5)
 colnames(proj.slov) &lt;- colnames(proj.ryog) &lt;- seq(1961, 2001, 5)
 
@@ -804,7 +804,8 @@ round(proj.t01)
 
 <p>We can approximate the stable equivalent to the original population by projecting \( n0 \) foward a sufficiently large number of steps. This reproduces the percentage distribution of the stable equivalent population, shown in Table 3.3. (p. 70).</p>
 
-<pre><code class="r">round(stablepop_pct(n0, G) * 100, 4)
+<pre><code class="r">t500 &lt;- project(n0, n_states = 2, pmat = G, n_steps = 500)
+round(prop.table(matrix(t500[, ncol(t500)], ncol = 2), 2) * 100, 4)
 </code></pre>
 
 <pre><code>##         [,1]  [,2]
@@ -967,10 +968,10 @@ round(proj.t01)
 <pre><code class="r">projection_matrix
 </code></pre>
 
-<pre><code>## function (fertility, survivorship) 
+<pre><code>## function (birth_prop, survivor_prop) 
 ## {
-##     B &lt;- fertility
-##     S &lt;- survivorship
+##     B &lt;- birth_prop
+##     S &lt;- survivor_prop
 ##     n_ages &lt;- length(B) + 1
 ##     n_states &lt;- ncol(B[[1]])
 ##     G &lt;- diag(rep(0, n_ages * n_states))
@@ -991,21 +992,31 @@ round(proj.t01)
 <pre><code class="r">project
 </code></pre>
 
-<pre><code>## function (init, pmat, nsteps, lbls = NULL) 
+<pre><code>## function (init_pop, n_states, pmat, n_steps, lbls = NULL) 
 ## {
-##     nclasses &lt;- length(init)
-##     pops &lt;- matrix(nrow = nsteps + 1, ncol = nclasses)
-##     colnames(pops) &lt;- lbls
-##     rownames(pops) &lt;- paste(&quot;t&quot;, seq(0, nsteps), sep = &quot;&quot;)
-##     pops[1, ] &lt;- init
-##     i &lt;- nsteps
-##     n &lt;- init
+##     n_ages &lt;- length(init_pop)/n_states
+##     N0 &lt;- split(init_pop, rep(seq(n_states), each = length(init_pop)/n_states))
+##     N0 &lt;- ggplot2:::interleave(N0)
+##     N.projected &lt;- matrix(nrow = n_steps + 1, ncol = n_ages * 
+##         n_states)
+##     colnames(N.projected) &lt;- rep(lbls, n_states)
+##     rownames(N.projected) &lt;- paste(&quot;t&quot;, seq(0, n_steps), sep = &quot;&quot;)
+##     N.projected[1, ] &lt;- N0
+##     i &lt;- n_steps
+##     n &lt;- N0
 ##     while (i &gt; 0) {
 ##         n &lt;- pmat %*% n
-##         pops[nsteps + 2 - i, ] &lt;- n
+##         N.projected[n_steps + 2 - i, ] &lt;- n
 ##         i &lt;- i - 1
 ##     }
-##     pops
+##     N.list &lt;- list()
+##     N.projected &lt;- t(N.projected)
+##     for (i in 1:n_states) {
+##         N.list[[i]] &lt;- N.projected[seq(i, nrow(N.projected), 
+##             n_states), ]
+##     }
+##     N.projected &lt;- do.call(rbind, N.list)
+##     N.projected
 ## }
 </code></pre>
 

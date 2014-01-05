@@ -51,10 +51,10 @@ state_table <- function(data, nstate, rlbl, clbl) {
   
 }
 
-stablepop_pct <- function(init, pmat, nsteps=500) {
+stablepop_pct <- function(init_pop, n_states, pmat, n_steps=500) {
   # calculate pct. distr. for approx. stable equvalent population
   
-  tn <- project(init=init, pmat=pmat, nsteps=nsteps)
+  tn <- project(init_pop=init_pop, n_states=n_states, pmat=pmat, n_steps=n_steps)
   tn_1 <- t(tn[,seq(1,ncol(tn),2)])
   tn_2 <- t(tn[,seq(2,ncol(tn),2)])
   n1 <- tn_1[,ncol(tn_1)]
